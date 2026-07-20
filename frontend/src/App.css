@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #4f46e5;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+  100% { transform: translateY(0px); }
+}
+.animate-float { animation: float 6s ease-in-out infinite; }
+
+.glass-card {
+  @apply bg-slate-900/40 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+}
+
+.neon-glow-blue {
+  box-shadow: 0 0 20px -5px rgba(59, 130, 246, 0.5);
+}
+
+.neon-glow-purple {
+  box-shadow: 0 0 20px -5px rgba(168, 85, 247, 0.5);
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+.animate-pulse-slow {
+  animation: pulse-slow 8s infinite;
+}
