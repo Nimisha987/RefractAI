@@ -843,20 +843,39 @@ def analyze_transcript(text):
                 time.sleep(1)
 
     raise last_error
+def _call_synthesis(insight_block, system_prompt):
+    client = _get_client()
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Here are the confirmed insights:\n\n{insight_block}"},
+        ],
+        max_tokens=900,
+        temperature=0.2,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    print(f"[INFO] Synthesis routed to model: {getattr(response, 'model', 'unknown')}")
+
+    raw_output = response.choices[0].message.content
+    parsed = parse_json_safely(raw_output)
+
+    if not isinstance(parsed, dict) or "themes" not in parsed or "executive_summary" not in parsed:
+        raise AnalysisError("Synthesis response missing required fields")
+
+    return parsed
+
 
 def synthesize_insights(insights):
     """
-    Takes a list of confirmed insight dicts (category, content, quote, participant_name)
-    and produces a synthesized research brief: recurring themes grouped by frequency,
-    plus a short executive summary. This is what turns Refract from an extraction tool
-    into an actual analyst — most competitors stop at listing individual insights.
+    Takes a list of confirmed insight dicts and produces a synthesized research
+    brief: recurring themes grouped by frequency, plus an executive summary.
+    Retries on transient failures (empty response, malformed JSON) since
+    openrouter/free routes to a different model each call.
     """
     if not insights:
         raise AnalysisError("No confirmed insights to synthesize. Confirm at least one insight first.")
 
-    client = _get_client()
-
-    # Build a compact, numbered list so the model can reference insights by index
     insight_lines = []
     for idx, i in enumerate(insights):
         insight_lines.append(
@@ -884,33 +903,94 @@ def synthesize_insights(insights):
         "}"
     )
 
-    user_prompt = f"Here are the confirmed insights:\n\n{insight_block}"
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            parsed = _call_synthesis(insight_block, system_prompt)
+            for theme in parsed.get("themes", []):
+                indices = theme.get("insight_indices", [])
+                theme["insights"] = [insights[i] for i in indices if isinstance(i, int) and 0 <= i < len(insights)]
+                theme.pop("insight_indices", None)
+            return parsed
+        except AnalysisError as e:
+            last_error = e
+            print(f"[WARN] Synthesis attempt {attempt}/{MAX_ATTEMPTS} failed: {e}")
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(1)
+        except Exception as e:
+            last_error = AnalysisError(f"Synthesis API request failed: {e}")
+            print(f"[WARN] Synthesis attempt {attempt}/{MAX_ATTEMPTS} failed: {e}")
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(1)
 
-    try:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=900,
-            temperature=0.2,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except Exception as e:
-        raise AnalysisError(f"Synthesis API request failed: {e}") from e
+    raise last_error
+# def synthesize_insights(insights):
+#     """
+#     Takes a list of confirmed insight dicts (category, content, quote, participant_name)
+#     and produces a synthesized research brief: recurring themes grouped by frequency,
+#     plus a short executive summary. This is what turns Refract from an extraction tool
+#     into an actual analyst — most competitors stop at listing individual insights.
+#     """
+#     if not insights:
+#         raise AnalysisError("No confirmed insights to synthesize. Confirm at least one insight first.")
 
-    raw_output = response.choices[0].message.content
-    parsed = parse_json_safely(raw_output)
+#     client = _get_client()
 
-    if not isinstance(parsed, dict) or "themes" not in parsed or "executive_summary" not in parsed:
-        raise AnalysisError("Synthesis response missing required fields")
+#     # Build a compact, numbered list so the model can reference insights by index
+#     insight_lines = []
+#     for idx, i in enumerate(insights):
+#         insight_lines.append(
+#             f"[{idx}] ({i['category']}) {i['content']} — participant: {i['participant_name']} — quote: \"{i['quote']}\""
+#         )
+#     insight_block = "\n".join(insight_lines)
 
-    # Map insight_indices back to actual insight objects (with real ids/quotes)
-    # rather than trusting the model to echo them correctly.
-    for theme in parsed.get("themes", []):
-        indices = theme.get("insight_indices", [])
-        theme["insights"] = [insights[i] for i in indices if isinstance(i, int) and 0 <= i < len(insights)]
-        theme.pop("insight_indices", None)
+#     system_prompt = (
+#         "You are a Senior Product Research Analyst. You will be given a numbered list of "
+#         "confirmed research insights gathered across multiple user interviews. Your job is to "
+#         "synthesize them into a research brief for a Product Manager.\n\n"
+#         "1. Identify recurring THEMES — insights from different participants that describe the "
+#         "same underlying issue or request. Group insight indices under each theme.\n"
+#         "2. Write a concise 3-5 sentence executive summary of the overall findings.\n"
+#         "3. Identify the single highest-priority theme (the one mentioned by the most participants, "
+#         "or with the clearest impact) as 'top_priority'.\n\n"
+#         "Return ONLY a JSON object with this exact shape:\n"
+#         "{\n"
+#         '  "executive_summary": "...",\n'
+#         '  "top_priority": "short theme title",\n'
+#         '  "themes": [\n'
+#         '    {"title": "short theme name", "category": "Pain Point" | "Feature Request", '
+#         '"insight_indices": [0, 2], "participant_count": 2}\n'
+#         "  ]\n"
+#         "}"
+#     )
 
-    return parsed
+#     user_prompt = f"Here are the confirmed insights:\n\n{insight_block}"
+
+#     try:
+#         response = client.chat.completions.create(
+#             model=MODEL,
+#             messages=[
+#                 {"role": "system", "content": system_prompt},
+#                 {"role": "user", "content": user_prompt},
+#             ],
+#             max_tokens=900,
+#             temperature=0.2,
+#             timeout=REQUEST_TIMEOUT_SECONDS,
+#         )
+#     except Exception as e:
+#         raise AnalysisError(f"Synthesis API request failed: {e}") from e
+
+#     raw_output = response.choices[0].message.content
+#     parsed = parse_json_safely(raw_output)
+
+#     if not isinstance(parsed, dict) or "themes" not in parsed or "executive_summary" not in parsed:
+#         raise AnalysisError("Synthesis response missing required fields")
+
+#     # Map insight_indices back to actual insight objects (with real ids/quotes)
+#     # rather than trusting the model to echo them correctly.
+#     for theme in parsed.get("themes", []):
+#         indices = theme.get("insight_indices", [])
+#         theme["insights"] = [insights[i] for i in indices if isinstance(i, int) and 0 <= i < len(insights)]
+#         theme.pop("insight_indices", None)
+
+#     return parsed

@@ -212,7 +212,44 @@ def export_insights():
     except Exception as e:
         print(f"[ERROR] Failed exporting insights: {e}")
         return jsonify({"error": str(e)}), 500
+@app.route('/api/synthesize', methods=['POST'])
+def synthesize():
+    """
+    Generates a research brief from all CONFIRMED insights (optionally scoped
+    to a project). This is a second LLM pass over already-verified data —
+    only insights a human has confirmed feed into the brief, so the output
+    inherits that trust.
+    """
+    try:
+        data = request.json or {}
+        project_id = data.get('project_id')
 
+        query = Insight.query.join(Interview).filter(Insight.status == 'confirmed')
+        if project_id:
+            query = query.filter(Interview.project_id == project_id)
+
+        confirmed = query.all()
+
+        insight_dicts = [
+            {
+                "category": i.category,
+                "content": i.content,
+                "quote": i.quote,
+                "participant_name": i.interview.participant_name,
+            }
+            for i in confirmed
+        ]
+
+        brief = synthesize_insights(insight_dicts)
+        return jsonify(brief), 200
+
+    except AnalysisError as ai_err:
+        print(f"[AI ERROR] {ai_err}")
+        return jsonify({"error": "Synthesis failed", "details": str(ai_err)}), 502
+
+    except Exception as e:
+        print(f"[ERROR] Failed generating brief: {e}")
+        return jsonify({"error": str(e)}), 500
 
 def _serialize_interview(interview):
     return {
@@ -243,7 +280,52 @@ def _serialize_insight(insight, include_interview_meta=True):
         })
     return base
 
+@app.route('/api/trends', methods=['GET'])
+def get_trends():
+    """
+    Returns interview counts + sentiment breakdown grouped by date, plus
+    insight counts by category — feeds the Dashboard trend chart.
+    Optional ?project_id= to scope to one project.
+    """
+    try:
+        project_id = request.args.get('project_id', type=int)
 
+        query = Interview.query
+        if project_id:
+            query = query.filter(Interview.project_id == project_id)
+
+        interviews = query.order_by(Interview.created_at.asc()).all()
+
+        by_date = {}
+        for interview in interviews:
+            date_key = interview.created_at.strftime('%Y-%m-%d') if interview.created_at else 'unknown'
+            if date_key not in by_date:
+                by_date[date_key] = {
+                    "date": date_key,
+                    "interviews": 0,
+                    "pain_points": 0,
+                    "feature_requests": 0,
+                    "positive": 0,
+                    "neutral": 0,
+                    "negative": 0,
+                }
+            by_date[date_key]["interviews"] += 1
+            sentiment_key = (interview.sentiment_score or "Neutral").lower()
+            if sentiment_key in ("positive", "neutral", "negative"):
+                by_date[date_key][sentiment_key] += 1
+            for insight in interview.insights:
+                if insight.category == "Pain Point":
+                    by_date[date_key]["pain_points"] += 1
+                elif insight.category == "Feature Request":
+                    by_date[date_key]["feature_requests"] += 1
+
+        result = sorted(by_date.values(), key=lambda x: x["date"])
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"[ERROR] Failed fetching trends: {e}")
+        return jsonify({"error": str(e)}), 500
+        
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

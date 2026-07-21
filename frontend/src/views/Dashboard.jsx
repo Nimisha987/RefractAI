@@ -1,12 +1,36 @@
-import React, { useState } from "react";
-import { Sparkles, Plus, MessageSquare, Layout, Search, Clock, ChevronDown, ChevronUp, Quote, FileText } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Sparkles, Plus, MessageSquare, Layout, Search, Clock, ChevronDown, ChevronUp, Quote, FileText, TrendingUp } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 export default function Dashboard({ interviews, loading, onOpenUpload, onNavigate }) {
   const [expandedId, setExpandedId] = useState(null);
+  const [trends, setTrends] = useState([]);
+  const [trendsLoading, setTrendsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTrends = async () => {
+      setTrendsLoading(true);
+      try {
+        const res = await fetch("http://localhost:5000/api/trends?project_id=1");
+        const data = await res.json();
+        setTrends(data);
+      } catch (err) {
+        console.error("Failed to fetch trends:", err);
+      } finally {
+        setTrendsLoading(false);
+      }
+    };
+    fetchTrends();
+  }, [interviews]); // refetch whenever interviews change (new analysis added)
 
   const formatDate = (iso) => {
     if (!iso) return "Unknown date";
     return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const formatChartDate = (dateStr) => {
+    if (!dateStr || dateStr === "unknown") return dateStr;
+    return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   };
 
   return (
@@ -56,6 +80,27 @@ export default function Dashboard({ interviews, loading, onOpenUpload, onNavigat
             <Plus size={20} /> New Analysis
           </button>
         </header>
+
+        {!trendsLoading && trends.length > 1 && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp size={16} className="text-indigo-600" />
+              <h3 className="text-sm font-bold text-slate-700">Insight Volume Over Time</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={trends} margin={{ top: 5, right: 20, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="date" tickFormatter={formatChartDate} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} />
+                <Tooltip labelFormatter={formatChartDate} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="pain_points" name="Pain Points" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="feature_requests" name="Feature Requests" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="interviews" name="Interviews" stroke="#6366f1" strokeWidth={2} strokeDasharray="4 2" dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center h-64 text-slate-400">Loading your data...</div>
