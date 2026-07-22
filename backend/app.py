@@ -1,11 +1,17 @@
+
+
+
 import os
 import csv
 import io
+import tempfile
 import traceback
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
+from flask_migrate import Migrate
 from models import db, Project, Interview, Insight
 from analyst import analyze_transcript, synthesize_insights, AnalysisError
+from transcriber import transcribe_audio, TranscriptionError
 
 app = Flask(__name__)
 CORS(app)
@@ -15,8 +21,39 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
 
 db.init_app(app)
+migrate = Migrate(app, db)
 
 VALID_STATUSES = ('pending', 'confirmed', 'rejected')
+
+
+@app.route('/api/transcribe', methods=['POST'])
+def transcribe():
+    """Accepts an uploaded audio/video file, returns raw transcribed text.
+    Purely a speech-to-text step — doesn't touch the database. Frontend then
+    sends the returned text to /api/analyze like any other transcript."""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    tmp_path = None
+    try:
+        suffix = os.path.splitext(file.filename)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            file.save(tmp.name)
+            tmp_path = tmp.name
+
+        text = transcribe_audio(tmp_path, file.filename)
+        return jsonify({"transcript": text}), 200
+
+    except TranscriptionError as e:
+        return jsonify({"error": str(e)}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 @app.route('/api/analyze', methods=['POST', 'OPTIONS'])
@@ -88,6 +125,22 @@ def get_interviews():
         return jsonify([_serialize_interview(i) for i in interviews]), 200
     except Exception as e:
         print(f"[ERROR] Failed fetching interviews: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/interviews/<int:interview_id>', methods=['DELETE'])
+def delete_interview(interview_id):
+    try:
+        interview = db.session.get(Interview, interview_id)
+        if interview is None:
+            return jsonify({"error": "Interview not found"}), 404
+
+        db.session.delete(interview)
+        db.session.commit()
+        return jsonify({"status": "deleted", "id": interview_id}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Failed deleting interview {interview_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -168,6 +221,22 @@ def update_insight(insight_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/insights/<int:insight_id>', methods=['DELETE'])
+def delete_insight(insight_id):
+    try:
+        insight = db.session.get(Insight, insight_id)
+        if insight is None:
+            return jsonify({"error": "Insight not found"}), 404
+
+        db.session.delete(insight)
+        db.session.commit()
+        return jsonify({"status": "deleted", "id": insight_id}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Failed deleting insight {insight_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/insights/export', methods=['GET'])
 def export_insights():
     try:
@@ -212,14 +281,10 @@ def export_insights():
     except Exception as e:
         print(f"[ERROR] Failed exporting insights: {e}")
         return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/synthesize', methods=['POST'])
 def synthesize():
-    """
-    Generates a research brief from all CONFIRMED insights (optionally scoped
-    to a project). This is a second LLM pass over already-verified data —
-    only insights a human has confirmed feed into the brief, so the output
-    inherits that trust.
-    """
     try:
         data = request.json or {}
         project_id = data.get('project_id')
@@ -251,42 +316,9 @@ def synthesize():
         print(f"[ERROR] Failed generating brief: {e}")
         return jsonify({"error": str(e)}), 500
 
-def _serialize_interview(interview):
-    return {
-        "id": interview.id,
-        "project_id": interview.project_id,
-        "participant_name": interview.participant_name,
-        "raw_transcript": interview.raw_transcript,
-        "sentiment_score": interview.sentiment_score,
-        "created_at": interview.created_at.isoformat() if interview.created_at else None,
-        "insights": [_serialize_insight(i, include_interview_meta=False) for i in interview.insights],
-    }
-
-
-def _serialize_insight(insight, include_interview_meta=True):
-    base = {
-        "id": insight.id,
-        "category": insight.category,
-        "content": insight.content,
-        "quote": insight.quote,
-        "status": insight.status,
-    }
-    if include_interview_meta:
-        base.update({
-            "interview_id": insight.interview_id,
-            "participant_name": insight.interview.participant_name,
-            "created_at": insight.interview.created_at.isoformat() if insight.interview.created_at else None,
-            "sentiment_score": insight.interview.sentiment_score,
-        })
-    return base
 
 @app.route('/api/trends', methods=['GET'])
 def get_trends():
-    """
-    Returns interview counts + sentiment breakdown grouped by date, plus
-    insight counts by category — feeds the Dashboard trend chart.
-    Optional ?project_id= to scope to one project.
-    """
     try:
         project_id = request.args.get('project_id', type=int)
 
@@ -325,7 +357,75 @@ def get_trends():
     except Exception as e:
         print(f"[ERROR] Failed fetching trends: {e}")
         return jsonify({"error": str(e)}), 500
-        
+
+
+@app.route('/api/participants', methods=['GET'])
+def get_participants():
+    """Groups all interviews + insights by participant_name — lets you see
+    if the same person was interviewed multiple times and how their feedback
+    evolved, instead of only viewing data per-interview or per-category."""
+    try:
+        project_id = request.args.get('project_id', type=int)
+        query = Interview.query
+        if project_id:
+            query = query.filter(Interview.project_id == project_id)
+        interviews = query.order_by(Interview.created_at.asc()).all()
+
+        grouped = {}
+        for interview in interviews:
+            name = interview.participant_name or "Anonymous"
+            if name not in grouped:
+                grouped[name] = {
+                    "participant_name": name,
+                    "interview_count": 0,
+                    "pain_point_count": 0,
+                    "feature_request_count": 0,
+                    "interviews": [],
+                }
+            grouped[name]["interview_count"] += 1
+            grouped[name]["interviews"].append(_serialize_interview(interview))
+            for insight in interview.insights:
+                if insight.category == "Pain Point":
+                    grouped[name]["pain_point_count"] += 1
+                elif insight.category == "Feature Request":
+                    grouped[name]["feature_request_count"] += 1
+
+        return jsonify(list(grouped.values())), 200
+    except Exception as e:
+        print(f"[ERROR] Failed fetching participants: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def _serialize_interview(interview):
+    return {
+        "id": interview.id,
+        "project_id": interview.project_id,
+        "participant_name": interview.participant_name,
+        "raw_transcript": interview.raw_transcript,
+        "sentiment_score": interview.sentiment_score,
+        "created_at": interview.created_at.isoformat() if interview.created_at else None,
+        "insights": [_serialize_insight(i, include_interview_meta=False) for i in interview.insights],
+    }
+
+
+def _serialize_insight(insight, include_interview_meta=True):
+    base = {
+        "id": insight.id,
+        "category": insight.category,
+        "content": insight.content,
+        "quote": insight.quote,
+        "status": insight.status,
+    }
+    if include_interview_meta:
+        base.update({
+            "interview_id": insight.interview_id,
+            "participant_name": insight.interview.participant_name,
+            "created_at": insight.interview.created_at.isoformat() if insight.interview.created_at else None,
+            "sentiment_score": insight.interview.sentiment_score,
+        })
+    return base
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

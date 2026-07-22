@@ -1,8 +1,12 @@
+
+
+
+
 import React, { useState, useEffect } from "react";
-import { Sparkles, Plus, MessageSquare, Layout, Search, Clock, ChevronDown, ChevronUp, Quote, FileText, TrendingUp } from "lucide-react";
+import { Sparkles, Plus, MessageSquare, Layout, Search, Clock, ChevronDown, ChevronUp, Quote, FileText, TrendingUp, Trash2, Users } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
-export default function Dashboard({ interviews, loading, onOpenUpload, onNavigate }) {
+export default function Dashboard({ interviews, loading, onOpenUpload, onNavigate, onDeleteInterview }) {
   const [expandedId, setExpandedId] = useState(null);
   const [trends, setTrends] = useState([]);
   const [trendsLoading, setTrendsLoading] = useState(true);
@@ -21,7 +25,7 @@ export default function Dashboard({ interviews, loading, onOpenUpload, onNavigat
       }
     };
     fetchTrends();
-  }, [interviews]); // refetch whenever interviews change (new analysis added)
+  }, [interviews]);
 
   const formatDate = (iso) => {
     if (!iso) return "Unknown date";
@@ -44,23 +48,17 @@ export default function Dashboard({ interviews, loading, onOpenUpload, onNavigat
             <span className="text-xl font-bold text-slate-900 tracking-tight">Refract</span>
           </div>
           <nav className="space-y-1">
-            <button
-              onClick={() => onNavigate("dashboard")}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-50 text-indigo-600 font-medium text-sm"
-            >
+            <button onClick={() => onNavigate("dashboard")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-50 text-indigo-600 font-medium text-sm">
               <Layout size={18} /> Dashboard
             </button>
-            <button
-              onClick={() => onNavigate("insights")}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 hover:bg-slate-50 transition text-sm"
-            >
+            <button onClick={() => onNavigate("insights")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 hover:bg-slate-50 transition text-sm">
               <MessageSquare size={18} /> Insights
             </button>
-            <button
-              onClick={() => onNavigate("brief")}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 hover:bg-slate-50 transition text-sm"
-            >
+            <button onClick={() => onNavigate("brief")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 hover:bg-slate-50 transition text-sm">
               <FileText size={18} /> Research Brief
+            </button>
+            <button onClick={() => onNavigate("participants")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 hover:bg-slate-50 transition text-sm">
+              <Users size={18} /> Participants
             </button>
           </nav>
         </div>
@@ -126,13 +124,27 @@ export default function Dashboard({ interviews, loading, onOpenUpload, onNavigat
                       <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
                         <MessageSquare size={20} />
                       </div>
-                      <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md ${
-                        item.sentiment_score === 'Positive' ? 'bg-emerald-50 text-emerald-600' :
-                        item.sentiment_score === 'Negative' ? 'bg-red-50 text-red-600' :
-                        'bg-slate-100 text-slate-500'
-                      }`}>
-                        {item.sentiment_score}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md ${
+                          item.sentiment_score === 'Positive' ? 'bg-emerald-50 text-emerald-600' :
+                          item.sentiment_score === 'Negative' ? 'bg-red-50 text-red-600' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {item.sentiment_score}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete ${item.participant_name}'s interview? This cannot be undone.`)) {
+                              onDeleteInterview(item.id);
+                            }
+                          }}
+                          className="text-slate-300 hover:text-red-500 transition p-1"
+                          title="Delete interview"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                     <h3 className="font-bold text-slate-800 mb-1">{item.participant_name}</h3>
                     <div className="flex items-center gap-2 text-xs text-slate-400 mb-4">

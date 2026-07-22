@@ -1,3 +1,4 @@
+
 """
 Populates the database with realistic demo data so the dashboard isn't
 empty on first run. Does NOT call the AI — inserts pre-written insights
