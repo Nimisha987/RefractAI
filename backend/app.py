@@ -430,14 +430,15 @@ def _serialize_insight(insight, include_interview_meta=True):
     return base
 
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        if not db.session.get(Project, 1):
-            default_project = Project(id=1, name="Default Workspace Collection")
-            db.session.add(default_project)
-            db.session.commit()
-            print("[INIT] Database configured and default base workspace seeded.")
+with app.app_context():
+    db.create_all()
+    if not db.session.get(Project, 1):
+        default_project = Project(id=1, name="Default Workspace Collection")
+        db.session.add(default_project)
+        db.session.commit()
+        print("[INIT] Database configured and default base workspace seeded.")
 
+
+if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=app.config['DEBUG'])
