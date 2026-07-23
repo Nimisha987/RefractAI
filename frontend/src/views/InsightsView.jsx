@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Sparkles, Layout, MessageSquare, Search, Quote, Clock, Filter, Check, X, Download, FileText, Trash2, Users } from "lucide-react";
+import { API_BASE_URL } from "../config";
 
 export default function InsightsView({ onNavigate }) {
   const [insights, setInsights] = useState([]);
@@ -20,7 +21,7 @@ export default function InsightsView({ onNavigate }) {
   const fetchInsights = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/insights?${buildParams().toString()}`);
+      const res = await fetch(`${API_BASE_URL}/api/insights?${buildParams().toString()}`);
       const data = await res.json();
       setInsights(data);
     } catch (err) {
@@ -38,7 +39,7 @@ export default function InsightsView({ onNavigate }) {
   const updateStatus = async (id, newStatus) => {
     setInsights((prev) => prev.map((i) => (i.id === id ? { ...i, status: newStatus } : i)));
     try {
-      const res = await fetch(`http://localhost:5000/api/insights/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/insights/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -53,7 +54,7 @@ export default function InsightsView({ onNavigate }) {
   const deleteInsight = async (id) => {
     setInsights((prev) => prev.filter((i) => i.id !== id));
     try {
-      const res = await fetch(`http://localhost:5000/api/insights/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE_URL}/api/insights/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
     } catch (err) {
       console.error("Failed to delete insight:", err);
@@ -62,7 +63,7 @@ export default function InsightsView({ onNavigate }) {
   };
 
   const handleExport = () => {
-    window.location.href = `http://localhost:5000/api/insights/export?${buildParams().toString()}`;
+    window.location.href = `${API_BASE_URL}/api/insights/export?${buildParams().toString()}`;
   };
 
   const formatDate = (iso) => {

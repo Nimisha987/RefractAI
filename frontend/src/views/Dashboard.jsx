@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, Plus, MessageSquare, Layout, Search, Clock, ChevronDown, ChevronUp, Quote, FileText, TrendingUp, Trash2, Users } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { API_BASE_URL } from "../config";
 
 export default function Dashboard({ interviews, loading, onOpenUpload, onNavigate, onDeleteInterview }) {
   const [expandedId, setExpandedId] = useState(null);
@@ -15,7 +16,7 @@ export default function Dashboard({ interviews, loading, onOpenUpload, onNavigat
     const fetchTrends = async () => {
       setTrendsLoading(true);
       try {
-        const res = await fetch("http://localhost:5000/api/trends?project_id=1");
+        const res = await fetch(`${API_BASE_URL}/api/trends?project_id=1`);
         const data = await res.json();
         setTrends(data);
       } catch (err) {

@@ -14,7 +14,11 @@ from analyst import analyze_transcript, synthesize_insights, AnalysisError
 from transcriber import transcribe_audio, TranscriptionError
 
 app = Flask(__name__)
-CORS(app)
+# CORS(app)
+CORS(app, origins=[
+    "http://localhost:5173",
+    "https://your-project-name.vercel.app",
+])
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///refract.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -435,4 +439,5 @@ if __name__ == '__main__':
             db.session.commit()
             print("[INIT] Database configured and default base workspace seeded.")
 
-    app.run(port=5000, debug=app.config['DEBUG'])
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=app.config['DEBUG'])

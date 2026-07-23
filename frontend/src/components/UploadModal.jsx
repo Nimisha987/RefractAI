@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import { X, Sparkles, User, FileText, Loader2, Mic, UploadCloud } from "lucide-react";
-
+import { API_BASE_URL } from "../config";
 export default function UploadModal({ onClose, onRefresh }) {
   const [mode, setMode] = useState("text");
   const [transcript, setTranscript] = useState("");
@@ -25,7 +25,7 @@ export default function UploadModal({ onClose, onRefresh }) {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("http://localhost:5000/api/analyze", {
+      const response = await fetch("`${API_BASE_URL}/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -75,7 +75,7 @@ export default function UploadModal({ onClose, onRefresh }) {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("http://localhost:5000/api/transcribe", {
+      const res = await fetch("`${API_BASE_URL}/api/transcribe", {
         method: "POST",
         body: formData,
       });

@@ -8,6 +8,7 @@ import InsightsView from "./views/InsightsView";
 import BriefView from "./views/BriefView";
 import ParticipantsView from "./views/ParticipantsView";
 import UploadModal from "./components/UploadModal";
+import { API_BASE_URL } from "../config";
 
 export default function App() {
   const [view, setView] = useState("home");
@@ -18,7 +19,7 @@ export default function App() {
   const fetchInterviews = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/interviews");
+      const res = await fetch(`${API_BASE_URL}/api/interviews`);
       const data = await res.json();
       setInterviews(data);
     } catch (err) {

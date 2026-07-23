@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, Layout, MessageSquare, FileText, Users, Clock, ChevronDown, ChevronUp, Quote } from "lucide-react";
-
+import { API_BASE_URL } from "../config";
 export default function ParticipantsView({ onNavigate }) {
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -10,7 +10,7 @@ export default function ParticipantsView({ onNavigate }) {
     const fetchParticipants = async () => {
       setLoading(true);
       try {
-        const res = await fetch("http://localhost:5000/api/participants?project_id=1");
+        const res = await fetch(`${API_BASE_URL}/api/participants?project_id=1`);
         const data = await res.json();
         setParticipants(data);
       } catch (err) {

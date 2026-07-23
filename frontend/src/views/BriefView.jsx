@@ -1,7 +1,7 @@
 
 import React, { useState } from "react";
 import { Sparkles, Layout, MessageSquare, FileText, Loader2, TrendingUp, Quote, RefreshCw, Download, Users } from "lucide-react";
-
+import { API_BASE_URL } from "../config";
 function buildMarkdown(brief) {
   let md = `# Research Brief\n\n`;
   md += `_Generated ${new Date().toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}_\n\n`;
@@ -40,7 +40,7 @@ export default function BriefView({ onNavigate }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("http://localhost:5000/api/synthesize", {
+      const res = await fetch(`${API_BASE_URL}/api/synthesize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project_id: 1 }),
