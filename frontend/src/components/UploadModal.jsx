@@ -75,7 +75,7 @@ export default function UploadModal({ onClose, onRefresh }) {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("`${API_BASE_URL}/api/transcribe", {
+      const res = await fetch(`${API_BASE_URL}/api/transcribe`, {
         method: "POST",
         body: formData,
       });
