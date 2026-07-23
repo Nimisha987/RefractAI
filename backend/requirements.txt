@@ -5,3 +5,4 @@ flask-migrate
 openai
 python-dotenv
 json-repair
+gunicorn
