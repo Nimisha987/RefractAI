@@ -17,7 +17,7 @@ app = Flask(__name__)
 # CORS(app)
 CORS(app, origins=[
     "http://localhost:5173",
-    "https://your-project-name.vercel.app",
+    "https://refract-ai-vert.vercel.app",
 ])
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///refract.db'
