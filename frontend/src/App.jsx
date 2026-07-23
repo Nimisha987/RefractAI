@@ -8,7 +8,7 @@ import InsightsView from "./views/InsightsView";
 import BriefView from "./views/BriefView";
 import ParticipantsView from "./views/ParticipantsView";
 import UploadModal from "./components/UploadModal";
-import { API_BASE_URL } from "../config";
+import { API_BASE_URL } from "./config";
 
 export default function App() {
   const [view, setView] = useState("home");
