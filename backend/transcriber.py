@@ -4,30 +4,35 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Whisper transcription needs OpenAI's own API (not OpenRouter) since this
-# is an audio endpoint, not a chat-completion route.
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# OpenRouter now has a dedicated /api/v1/audio/transcriptions endpoint that
+# routes to Whisper — same key, same billing pool as the rest of the app.
+# No separate OpenAI key needed.
+api_key = os.getenv("OPENROUTER_API_KEY")
 
-_whisper_client = None
+_client = None
 
 ALLOWED_EXTENSIONS = {'.mp3', '.mp4', '.mpeg', '.mpga', '.m4a', '.wav', '.webm'}
 MAX_FILE_SIZE_MB = 25
+
+TRANSCRIPTION_MODEL = "openai/whisper-large-v3"
 
 
 class TranscriptionError(Exception):
     pass
 
 
-def _get_whisper_client():
-    global _whisper_client
-    if _whisper_client is None:
-        if not OPENAI_API_KEY:
+def _get_client():
+    global _client
+    if _client is None:
+        if not api_key:
             raise TranscriptionError(
-                "No OPENAI_API_KEY found in backend/.env. Audio transcription "
-                "requires a real OpenAI API key (separate from OpenRouter)."
+                "No OPENROUTER_API_KEY found in backend/.env"
             )
-        _whisper_client = OpenAI(api_key=OPENAI_API_KEY)
-    return _whisper_client
+        _client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
+    return _client
 
 
 def transcribe_audio(file_path, original_filename):
@@ -39,10 +44,13 @@ def transcribe_audio(file_path, original_filename):
     if size_mb > MAX_FILE_SIZE_MB:
         raise TranscriptionError(f"File is {size_mb:.1f}MB, exceeds the {MAX_FILE_SIZE_MB}MB limit.")
 
-    client = _get_whisper_client()
+    client = _get_client()
     try:
         with open(file_path, "rb") as f:
-            transcript = client.audio.transcriptions.create(model="whisper-1", file=f)
+            transcript = client.audio.transcriptions.create(
+                model=TRANSCRIPTION_MODEL,
+                file=f,
+            )
     except Exception as e:
         raise TranscriptionError(f"Transcription failed: {e}") from e
 
